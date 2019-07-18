@@ -47,6 +47,8 @@ parser.add_argument('--datadir', default='data', type=str,
                     help='directory of the polyvore outfits dataset (default: data)')
 parser.add_argument('--test', dest='test', action='store_true', default=False,
                     help='To only run inference on test set')
+parser.add_argument('--search_test', action='store_true', default=False,
+                    help='To only run inference on test set')
 parser.add_argument('--dim_embed', type=int, default=64, metavar='N',
                     help='how many dimensions in embedding (default: 64)')
 parser.add_argument('--use_fc', action='store_true', default=False,
@@ -110,12 +112,37 @@ def main():
 
     model = Resnet_18.resnet18(pretrained=True, embedding_size=args.dim_embed)
     csn_model = TypeSpecificNet(args, model, len(test_loader.dataset.typespaces))
-
+    print('done loading testing data.')
     criterion = torch.nn.MarginRankingLoss(margin = args.margin)
     tnet = Tripletnet(args, csn_model, text_feature_dim, criterion)
     if args.cuda:
         tnet.cuda()
+    ####################### moved part ###########################
+    # optionally resume from a checkpoint
+    if args.resume:
+        if os.path.isfile(args.resume):
+            print("=> loading checkpoint '{}'".format(args.resume))
+            if args.cuda:
+                checkpoint = torch.load(args.resume)
+            else:
+                checkpoint = torch.load(args.resume, map_location=lambda storage, loc: storage, pickle_module=pickle)
+            args.start_epoch = checkpoint['epoch']
+            best_acc = checkpoint['best_prec1']
+            tnet.load_state_dict(checkpoint['state_dict'])
+            print("=> loaded checkpoint '{}' (epoch {})"
+                    .format(args.resume, checkpoint['epoch']))
+        else:
+            print("=> no checkpoint found at '{}'".format(args.resume))
 
+    cudnn.benchmark = True    
+    if args.test:
+        print('start testing!')
+        if args.search_test:
+            test_acc = search_test(test_loader, tnet)
+        else:
+            test_acc = test(test_loader, tnet)
+        sys.exit()
+    ####################### moved part ###########################
     print('loading training data...')
     train_loader = torch.utils.data.DataLoader(
         TripletImageLoader(args, 'train', meta_data,
@@ -243,12 +270,42 @@ def train(train_loader, tnet, criterion, optimizer, epoch):
                 losses.val, losses.avg, 
                 100. * accs.val, 100. * accs.avg, emb_norms.val, emb_norms.avg))
 
+                  
+def search_test(test_loader, tnet):
+    # switch to evaluation mode
+    tnet.eval()
+    embeddings = []
+    print('embeddings...')
+    # for test/val data we get images only from the data loader
+    print(len(test_loader))
+    for batch_idx, images in enumerate(test_loader):
+        if args.cuda:
+            images = images.cuda()
+        images = Variable(images)
+        embeddings.append(tnet.embeddingnet(images).data)
+        print('embed: {}'.format(batch_idx))
+    embeddings = torch.cat(embeddings)
+    metric = tnet.metric_branch
+    print('done embeddings')
+    print('saving embeddings...')
+    torch.save(embeddings, 'embeddings.pt')
+	#search_outfit()
+    """
+    auc = test_loader.dataset.test_compatibility(embeddings, metric)
+    acc = test_loader.dataset.test_fitb(embeddings, metric)
+    total = auc + acc
+    print('\n{} set: Compat AUC: {:.2f} FITB: {:.1f}\n'.format(
+        test_loader.dataset.split,
+        round(auc, 2), round(acc * 100, 1)))
+    """
+    total = 0
+    return total
 
 def test(test_loader, tnet):
     # switch to evaluation mode
     tnet.eval()
     embeddings = []
-    
+    print('embeddings...')
     # for test/val data we get images only from the data loader
     for batch_idx, images in enumerate(test_loader):
         if args.cuda:
@@ -258,6 +315,9 @@ def test(test_loader, tnet):
         
     embeddings = torch.cat(embeddings)
     metric = tnet.metric_branch
+    print('done embeddings')
+    print(embeddings)
+    
     auc = test_loader.dataset.test_compatibility(embeddings, metric)
     acc = test_loader.dataset.test_fitb(embeddings, metric)
     total = auc + acc
@@ -265,6 +325,7 @@ def test(test_loader, tnet):
         test_loader.dataset.split,
         round(auc, 2), round(acc * 100, 1)))
     
+    total = 0
     return total
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
