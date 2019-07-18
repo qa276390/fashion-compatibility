@@ -23,7 +23,7 @@ from type_specific_network import TypeSpecificNet
 
 # Training settings
 parser = argparse.ArgumentParser(description='Fashion Compatibility Example')
-parser.add_argument('--batch-size', type=int, default=256, metavar='N',
+parser.add_argument('--batch-size', type=int, default=16, metavar='N',
                     help='input batch size for training (default: 256)')
 parser.add_argument('--epochs', type=int, default=10, metavar='N',
                     help='number of epochs to train (default: 10)')
@@ -110,9 +110,12 @@ def main():
                            ])),
         batch_size=args.batch_size, shuffle=False, **kwargs)
 
+    print(len(test_loader.dataset))
+    print(test_loader.dataset.__len__())
     model = Resnet_18.resnet18(pretrained=True, embedding_size=args.dim_embed)
     csn_model = TypeSpecificNet(args, model, len(test_loader.dataset.typespaces))
     print('done loading testing data.')
+    #print(len(test_loader))
     criterion = torch.nn.MarginRankingLoss(margin = args.margin)
     tnet = Tripletnet(args, csn_model, text_feature_dim, criterion)
     if args.cuda:
@@ -134,6 +137,7 @@ def main():
         else:
             print("=> no checkpoint found at '{}'".format(args.resume))
 
+    print(len(test_loader))
     cudnn.benchmark = True    
     if args.test:
         print('start testing!')
