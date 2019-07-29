@@ -78,8 +78,10 @@ parser.add_argument('--sim_t_loss', type=float, default=5e-5, metavar='M',
                     help='parameter for loss for text-text similarity')
 parser.add_argument('--sim_i_loss', type=float, default=5e-5, metavar='M',
                     help='parameter for loss for image-image similarity')
-parser.add_argument('--load_embed', dest='load_embed', action='store_false', default=True,
+parser.add_argument('--no_load_embed', dest='no_load_embed', action='store_true', default=False,
                     help='Load precomputed embeddings')
+parser.add_argument('--yahoo', dest='yahoo', action='store_true', default=False,
+                    help='Train with yahoo data')
 
 from functools import partial
 import pickle
@@ -100,6 +102,10 @@ def main():
 
     fn = os.path.join(args.datadir, 'polyvore_outfits', 'polyvore_item_metadata.json')
     meta_data = json.load(open(fn, 'r'))
+    if args.yahoo:
+        fn_yahoo = os.path.join(args.datadir, 'polyvore_outfits', 'meta_data_yahoo.json')
+        yahoo_meta_data = json.load(open(fn_yahoo, 'r'))
+        meta_data = {**meta_data, **yahoo_meta_data}
     text_feature_dim = 6000
     kwargs = {'num_workers': 8, 'pin_memory': True} if args.cuda else {}
     
@@ -206,9 +212,9 @@ def main():
             'best_prec1': best_acc,
         }, is_best)
     if args.cuda:
-        checkpoint = torch.load('runs/%s/'%(args.name) + 'model_best.pth.tar')
+        checkpoint = torch.save('runs/%s/'%(args.name) + 'model_best.pth.tar')
     else:
-        checkpoint = torch.load('runs/%s/'%(args.name) + 'model_best.pth.tar' ,map_location=lambda storage, loc: storage, pickle_module=pickle)
+        checkpoint = torch.save('runs/%s/'%(args.name) + 'model_best.pth.tar' ,map_location=lambda storage, loc: storage, pickle_module=pickle)
     tnet.load_state_dict(checkpoint['state_dict'])
     test_acc = test(test_loader, tnet)
 
@@ -320,12 +326,13 @@ def similarity_search(query_path, test_loader, tnet):
         query_embeddings.append(tnet.embeddingnet(images).data)
 
     query_embeddings = torch.cat(query_embeddings)
+    print(query_embeddings.size())
 
     print('=> loading test embeddings')
 
     embedding_path = os.path.join(args.datadir, 'polyvore_outfits', args.polyvore_split, 'test_embeddings.pt')
 
-    if not args.load_embed:
+    if args.no_load_embed:
         compute_and_save_embeddings(test_loader, tnet)
     
     embeddings = torch.load(embedding_path)
@@ -354,7 +361,7 @@ def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     if not os.path.exists(directory):
         os.makedirs(directory)
     filename = directory + filename
-    torch.save(state, filename)
+    torch.save(state, "{}_".format(str(state['epoch'])) + filename)
     if is_best:
         shutil.copyfile(filename, 'runs/%s/'%(args.name) + 'model_best.pth.tar')
 
