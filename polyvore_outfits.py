@@ -155,14 +155,18 @@ def load_wild_questions(fn):
 
 class TripletImageLoader(torch.utils.data.Dataset):
     def __init__(self, args, split, meta_data, text_dim = None, transform=None, loader=default_image_loader):
-        rootdir = os.path.join(args.datadir, 'polyvore_outfits', args.polyvore_split)
-        self.impath = os.path.join(args.datadir, 'polyvore_outfits', 'gray_images') # Change image location if train with grayscale
-        self.query_impath = os.path.join(args.datadir, 'polyvore_outfits', 'query_images')
+        if(args.yahoo_data):
+            dirname = 'yahoo_cloth'
+        else:
+            dirname = dirname
+        rootdir = os.path.join(args.datadir, dirname, args.polyvore_split)
+        self.impath = os.path.join(args.datadir, dirname, 'images') # Change image location if train with grayscale
+        self.query_impath = os.path.join(args.datadir, dirname, 'query_images')
         self.is_train = split == 'train'
         self.mode = split
         data_json = os.path.join(rootdir, '%s.json' % split)
         outfit_data = json.load(open(data_json, 'r'))
-
+        
         # get list of images and make a mapping used to quickly organize the data
         im2type = {}
         category2ims = {}
@@ -182,7 +186,7 @@ class TripletImageLoader(torch.utils.data.Dataset):
                     category2ims[category][outfit_id] = []
 
                 category2ims[category][outfit_id].append(im)
-                id2im['%s_%i' % (outfit_id, item['index'])] = im
+                id2im['%s_%i' % (outfit_id, int(item['index']))] = im
                 imnames.add(im)
 
         if self.mode == 'ss_test':

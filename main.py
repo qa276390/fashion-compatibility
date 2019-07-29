@@ -78,18 +78,26 @@ parser.add_argument('--sim_t_loss', type=float, default=5e-5, metavar='M',
                     help='parameter for loss for text-text similarity')
 parser.add_argument('--sim_i_loss', type=float, default=5e-5, metavar='M',
                     help='parameter for loss for image-image similarity')
-parser.add_argument('--load_embed', dest='load_embed', action='store_false', default=True,
+parser.add_argument('--load_embed', dest='load_embed', action='store_true', default=False,
                     help='Load precomputed embeddings')
-
+parser.add_argument('--yahoo_data', dest='yahoo_data', action='store_true', default=False,
+                    help='Using yahoo data')
+dirname = ''
 from functools import partial
 import pickle
 def main():
     global args
+    global dirname
     args = parser.parse_args()
     ##################### encoding problem #########################
     pickle.load = partial(pickle.load, encoding='latin1')
     pickle.Unpickler = partial(pickle.Unpickler, encoding='latin1')
     ##################### encoding problem #########################
+    if(args.yahoo_data):
+        dirname = 'yahoo_cloth'
+    else:
+        dirname = 'polyvore_outfits'
+    print('dirname=%s', dirname)
     args.cuda = not args.no_cuda and torch.cuda.is_available()
     torch.manual_seed(args.seed)
     if args.cuda:
@@ -98,7 +106,9 @@ def main():
     normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
                                      std=[0.229, 0.224, 0.225])
 
-    fn = os.path.join(args.datadir, 'polyvore_outfits', 'polyvore_item_metadata.json')
+    fn = os.path.join(args.datadir, dirname, 'polyvore_item_metadata.json')
+    if(args.yahoo_data):
+        fn = os.path.join(args.datadir, 'yahoo_cloth', 'meta_data.json')
     meta_data = json.load(open(fn, 'r'))
     text_feature_dim = 6000
     kwargs = {'num_workers': 8, 'pin_memory': True} if args.cuda else {}
@@ -176,7 +186,7 @@ def main():
             print("=> no checkpoint found at '{}'".format(args.resume))
 
     if args.sstest:
-        similarity_search(os.path.join(args.datadir, 'polyvore_outfits', args.polyvore_split, 'query.txt') ,test_loader, tnet)
+        similarity_search(os.path.join(args.datadir, dirname, args.polyvore_split, 'query.txt') ,test_loader, tnet)
         sys.exit()
 
     cudnn.benchmark = True    
@@ -311,7 +321,7 @@ def similarity_search(query_path, test_loader, tnet):
 
     for line in tqdm(lines):
         images, _ = line.split()
-        images = os.path.join(args.datadir, 'polyvore_outfits', 'query_images', '%s.jpg' % images)
+        images = os.path.join(args.datadir, dirname, 'query_images', '%s.jpg' % images)
         images = default_image_loader(images)
         images = trasform(images)
         if args.cuda:
@@ -321,9 +331,9 @@ def similarity_search(query_path, test_loader, tnet):
 
     query_embeddings = torch.cat(query_embeddings)
 
-    print('=> loading test embeddings')
+    print('=> loading or computing test embeddings')
 
-    embedding_path = os.path.join(args.datadir, 'polyvore_outfits', args.polyvore_split, 'test_embeddings.pt')
+    embedding_path = os.path.join(args.datadir, dirname, args.polyvore_split, 'test_embeddings.pt')
 
     if not args.load_embed:
         compute_and_save_embeddings(test_loader, tnet)
@@ -346,7 +356,8 @@ def compute_and_save_embeddings(test_loader, tnet):
 
     embeddings = torch.cat(embeddings)
 
-    torch.save(embeddings, os.path.join(args.datadir, 'polyvore_outfits', args.polyvore_split, 'test_embeddings.pt'))
+    print('save to:', os.path.join(args.datadir, dirname, args.polyvore_split, 'test_embeddings.pt'))
+    torch.save(embeddings, os.path.join(args.datadir, dirname, args.polyvore_split, 'test_embeddings.pt'))
 
 def save_checkpoint(state, is_best, filename='checkpoint.pth.tar'):
     """Saves checkpoint to disk"""
