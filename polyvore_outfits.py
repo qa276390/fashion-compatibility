@@ -12,6 +12,7 @@ import time
 from sklearn.metrics import roc_auc_score
 from torch.autograd import Variable
 from tqdm import tqdm
+import pandas as pd
 
 def default_image_loader(path):
     return Image.open(path).convert('RGB')
@@ -192,17 +193,16 @@ class TripletImageLoader(torch.utils.data.Dataset):
         if self.mode == 'ss_test':
             im2index = {}
             if args.load_embed:
-                with open(os.path.join(rootdir, 'embed_index.txt'), 'r') as f:
-                    img_order = f.read().splitlines()
-                    imnames = img_order
-                    for index, im in enumerate(img_order):
-                        im2index[im] = index
+                df = pd.read_csv(os.path.join(rootdir, 'embed_index.csv'), dtype = {'image':str, 'type':str})
+                for index, row in df.iterrows():
+                    im2index[row[0]] = index
             else:
                 imnames = sorted(list(imnames))
-                with open(os.path.join(rootdir, 'embed_index.txt'), 'w') as f:
-                    for index, im in enumerate(imnames):
-                        im2index[im] = index
-                        f.write(im+"\n")
+                for index, im in enumerate(imnames):
+                    im2index[im] = index
+                d = {'image': imnames, 'type': [im2type[name] for name in imnames]}
+                df = pd.DataFrame.from_dict(d)
+                df.to_csv(os.path.join(rootdir, 'embed_index.csv'), index=False)
         else:
             imnames = sorted(list(imnames))
             im2index = {}
